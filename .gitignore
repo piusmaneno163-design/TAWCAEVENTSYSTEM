@@ -1,0 +1,6 @@
+.vscode/
+__pycache__/
+*.pyc
+transaction_ledger.db
+.env
+.DS_Store

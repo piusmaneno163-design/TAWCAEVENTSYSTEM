@@ -1,0 +1,13 @@
+streamlit
+pandas
+numpy
+scipy
+plotly
+requests
+beautifulsoup4
+python-dotenv
+Pillow
+qrcode
+pyzbar
+PyPDF2
+reportlab
