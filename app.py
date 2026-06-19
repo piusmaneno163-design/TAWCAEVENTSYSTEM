@@ -55,8 +55,72 @@ os.makedirs(QR_FOLDER, exist_ok=True)
 os.makedirs(CERT_FOLDER, exist_ok=True)
 
 
+try:
+    import psycopg2
+except Exception:
+    psycopg2 = None
+
+
+class CursorProxy:
+    def __init__(self, cursor, dialect="sqlite"):
+        self._cursor = cursor
+        self._dialect = dialect
+
+    def execute(self, sql, params=None):
+        if self._dialect == "psycopg2" and params is not None:
+            sql = sql.replace("?", "%s")
+        return self._cursor.execute(sql, params or ())
+
+    def executemany(self, sql, seq_of_params):
+        if self._dialect == "psycopg2":
+            sql = sql.replace("?", "%s")
+        return self._cursor.executemany(sql, seq_of_params)
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+    def __getattr__(self, name):
+        return getattr(self._cursor, name)
+
+
+class ConnectionProxy:
+    def __init__(self, conn, dialect="sqlite"):
+        self._conn = conn
+        self._dialect = dialect
+
+    def cursor(self):
+        cur = self._conn.cursor()
+        if self._dialect == "psycopg2":
+            return CursorProxy(cur, "psycopg2")
+        return cur
+
+    def commit(self):
+        return self._conn.commit()
+
+    def close(self):
+        return self._conn.close()
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
 def get_connection():
-    return sqlite3.connect(DB_FILE, check_same_thread=False)
+    """Return a DB-API connection. If `DATABASE_URL` is set and points to Postgres,
+    a psycopg2 connection wrapped in a compatibility proxy is returned. Otherwise
+    falls back to the local SQLite file.
+    """
+    db_url = os.getenv("DATABASE_URL", "").strip()
+    if db_url:
+        if psycopg2 is None:
+            raise RuntimeError("psycopg2 is required when using DATABASE_URL. Install psycopg2-binary.")
+        conn = psycopg2.connect(db_url)
+        return ConnectionProxy(conn, dialect="psycopg2")
+    # default to sqlite
+    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+    return ConnectionProxy(conn, dialect="sqlite")
 
 
 def initialize_database():
@@ -487,7 +551,7 @@ def apply_dashboard_style():
         .css-1d391kg .stButton>button:hover {{ background: {PRIMARY_COLOR}; }}
         .stDataFrame table {{ background: {CARD_COLOR}; color: white; }}
         .stDataFrame thead th {{ color: white; }}
-        .css-1dp5yj-egzxv9 { background: {CARD_COLOR}; }
+        .css-1dp5yj-egzxv9 {{ background: {CARD_COLOR}; }}
         </style>
         """,
         unsafe_allow_html=True,
